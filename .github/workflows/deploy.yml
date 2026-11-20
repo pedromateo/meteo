@@ -1,0 +1,104 @@
+name: Deploy Meteo Hub & Apps
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  workflow_run:
+    workflows: ["Update Weather Forecast"]
+    types:
+      - completed
+    branches: [ "main", "master" ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22.x'
+
+      - name: Test MurMeteo
+        if: hashFiles('murmeteo/package.json') != ''
+        working-directory: murmeteo
+        run: |
+          npm ci || npm install
+          npx playwright install --with-deps chromium
+          npm run test
+
+      - name: Test PozoMeteo
+        if: hashFiles('pozometeo/test.js') != ''
+        working-directory: pozometeo
+        run: |
+          node test.js
+
+      - name: Prepare production build
+        run: |
+          mkdir -p dist/murmeteo dist/elparte dist/pozometeo
+
+          # Portal raíz
+          if [ -f "index.html" ]; then
+            cp index.html dist/
+            touch dist/.nojekyll
+          fi
+
+          # MurMeteo Build & Copy
+          if [ -d "murmeteo" ]; then
+            echo "Packaging MurMeteo..."
+            cd murmeteo
+            sed -i "s/murmeteo-static-v[0-9]*/murmeteo-static-${{ github.sha }}/g" sw.js || true
+            cp index.html manifest.json sw.js config.json aemetService.js app.js style.css package.json ../dist/murmeteo/ || true
+            cp -r icons ../dist/murmeteo/ 2>/dev/null || true
+            cp -r card_images ../dist/murmeteo/ 2>/dev/null || true
+            cp -r forecasts ../dist/murmeteo/ 2>/dev/null || true
+            cp -f forecast.json ../dist/murmeteo/ 2>/dev/null || true
+            cd ..
+          fi
+
+          # ElParte Copy
+          if [ -d "elparte" ]; then
+            echo "Packaging ElParte..."
+            cd elparte
+            sed -i "s/elparte-shell-v[0-9]*/elparte-shell-${{ github.sha }}/g" sw.js || true
+            cp index.html manifest.webmanifest sw.js style.css app.js ../dist/elparte/ || true
+            cp -r icons ../dist/elparte/ 2>/dev/null || true
+            cd ..
+          fi
+
+          # PozoMeteo Copy
+          if [ -d "pozometeo" ]; then
+            echo "Packaging PozoMeteo..."
+            cd pozometeo
+            cp index.html manifest.json sw.js app.js style.css beach_rules.json ui_texts.json ../dist/pozometeo/ || true
+            cp *.png ../dist/pozometeo/ 2>/dev/null || true
+            cd ..
+          fi
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: './dist'
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

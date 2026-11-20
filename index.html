@@ -1,0 +1,327 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Meteo Hub · Proyectos Meteorológicos</title>
+  <meta name="description" content="Portal de aplicaciones meteorológicas y marítimas: MurMeteo (AEMET Murcia), ElParte (Previsión horaria) y PozoMeteo (Estado del baño).">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+  <style>
+    :root {
+      --bg: #f8fafc;
+      --surface: #ffffff;
+      --surface-2: #f1f5f9;
+      --ink: #0f172a;
+      --ink-2: #475569;
+      --ink-3: #94a3b8;
+      --line: #e2e8f0;
+      --accent: #0284c7;
+      --accent-soft: #e0f2fe;
+      --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 10px 25px -5px rgba(0, 0, 0, 0.05);
+      --shadow-hover: 0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 20px 35px -5px rgba(0, 0, 0, 0.08);
+      --radius: 16px;
+      color-scheme: light;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #0b1120;
+        --surface: #131c31;
+        --surface-2: #1e293b;
+        --ink: #f8fafc;
+        --ink-2: #cbd5e1;
+        --ink-3: #64748b;
+        --line: #334155;
+        --accent: #38bdf8;
+        --accent-soft: #0c4a6e;
+        --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3), 0 10px 25px -5px rgba(0, 0, 0, 0.3);
+        --shadow-hover: 0 10px 20px -3px rgba(0, 0, 0, 0.5), 0 25px 40px -5px rgba(0, 0, 0, 0.5);
+        color-scheme: dark;
+      }
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background-color: var(--bg);
+      color: var(--ink);
+      line-height: 1.6;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 2rem 1rem;
+    }
+
+    .container {
+      max-width: 1100px;
+      margin: 0 auto;
+      width: 100%;
+    }
+
+    header {
+      text-align: center;
+      margin-bottom: 3.5rem;
+      padding-top: 1rem;
+    }
+
+    .brand-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      background: var(--accent-soft);
+      color: var(--accent);
+      padding: 0.35rem 0.85rem;
+      border-radius: 9999px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      margin-bottom: 1.25rem;
+      border: 1px solid var(--line);
+    }
+
+    header h1 {
+      font-size: 2.75rem;
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      margin-bottom: 1rem;
+      line-height: 1.2;
+    }
+
+    header h1 span {
+      background: linear-gradient(135deg, #0284c7, #38bdf8);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    header p {
+      font-size: 1.15rem;
+      color: var(--ink-2);
+      max-width: 650px;
+      margin: 0 auto;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 2rem;
+      margin-bottom: 3rem;
+    }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 2rem;
+      box-shadow: var(--shadow);
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .card:hover {
+      transform: translateY(-4px);
+      box-shadow: var(--shadow-hover);
+      border-color: var(--accent);
+    }
+
+    .card-top {
+      margin-bottom: 1.5rem;
+    }
+
+    .card-icon-wrapper {
+      width: 56px;
+      height: 56px;
+      border-radius: 12px;
+      background: var(--surface-2);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.75rem;
+      margin-bottom: 1.25rem;
+      border: 1px solid var(--line);
+    }
+
+    .card h2 {
+      font-size: 1.5rem;
+      font-weight: 700;
+      margin-bottom: 0.35rem;
+      letter-spacing: -0.02em;
+    }
+
+    .card-subtitle {
+      font-size: 0.9rem;
+      color: var(--accent);
+      font-weight: 600;
+      margin-bottom: 1rem;
+      display: block;
+    }
+
+    .card p {
+      font-size: 0.95rem;
+      color: var(--ink-2);
+      line-height: 1.55;
+      margin-bottom: 1.5rem;
+    }
+
+    .tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .tag {
+      font-size: 0.75rem;
+      font-family: 'JetBrains Mono', monospace;
+      padding: 0.25rem 0.6rem;
+      border-radius: 6px;
+      background: var(--surface-2);
+      color: var(--ink-2);
+      border: 1px solid var(--line);
+    }
+
+    .card-action {
+      display: flex;
+      gap: 0.75rem;
+      margin-top: auto;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0.75rem 1.25rem;
+      border-radius: 10px;
+      font-size: 0.95rem;
+      font-weight: 600;
+      text-decoration: none;
+      transition: all 0.15s ease;
+      cursor: pointer;
+      width: 100%;
+    }
+
+    .btn-primary {
+      background: #0284c7;
+      color: #ffffff;
+      border: 1px solid #0284c7;
+    }
+
+    .btn-primary:hover {
+      background: #0369a1;
+      border-color: #0369a1;
+    }
+
+    footer {
+      text-align: center;
+      padding: 2.5rem 0 1rem;
+      border-top: 1px solid var(--line);
+      color: var(--ink-3);
+      font-size: 0.9rem;
+    }
+
+    footer a {
+      color: var(--ink-2);
+      text-decoration: none;
+      font-weight: 500;
+    }
+
+    footer a:hover {
+      color: var(--accent);
+      text-decoration: underline;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+    <header>
+      <div class="brand-badge">
+        <span>🌤️</span>
+        <span>Suite Meteorológica Abierta</span>
+      </div>
+      <h1>Meteo <span>Hub</span></h1>
+      <p>Aplicaciones meteorológicas y marítimas de alta precisión, optimizadas como PWAs para consulta rápida y disponibilidad offline.</p>
+    </header>
+
+    <div class="grid">
+      <!-- MurMeteo -->
+      <article class="card">
+        <div class="card-top">
+          <div class="card-icon-wrapper">🌦️</div>
+          <h2>MurMeteo</h2>
+          <span class="card-subtitle">Clima oficial de Murcia</span>
+          <p>Predicción meteorológica horaria y diaria detallada para el municipio de Murcia. Integra avisos oficiales de AEMET, mapas de radar, alertas y actualización periódica automatizada en segundo plano.</p>
+        </div>
+        <div>
+          <div class="tags">
+            <span class="tag">AEMET OpenData</span>
+            <span class="tag">PWA Offline</span>
+            <span class="tag">Cron 20min</span>
+            <span class="tag">Playwright Tests</span>
+          </div>
+          <div class="card-action">
+            <a class="btn btn-primary" href="./murmeteo/">Abrir MurMeteo ↗</a>
+          </div>
+        </div>
+      </article>
+
+      <!-- ElParte -->
+      <article class="card">
+        <div class="card-top">
+          <div class="card-icon-wrapper">☀️</div>
+          <h2>ElParte</h2>
+          <span class="card-subtitle">Previsión horaria visual</span>
+          <p>Visualización del tiempo a 7 días limpia, rápida y sin saturación. Diseñada para dar la previsión meteorológica de un vistazo, con scroll horizontal fluido y caché local instantáneo.</p>
+        </div>
+        <div>
+          <div class="tags">
+            <span class="tag">Open-Meteo API</span>
+            <span class="tag">PWA Client-Only</span>
+            <span class="tag">Zero-Config</span>
+          </div>
+          <div class="card-action">
+            <a class="btn btn-primary" href="./elparte/">Abrir ElParte ↗</a>
+          </div>
+        </div>
+      </article>
+
+      <!-- PozoMeteo -->
+      <article class="card">
+        <div class="card-top">
+          <div class="card-icon-wrapper">🏖️</div>
+          <h2>PozoMeteo</h2>
+          <span class="card-subtitle">Estado del baño en Pozo del Esparto</span>
+          <p>Monitorización en tiempo real del oleaje, dirección y velocidad del viento, y condiciones marítimas en la playa de Pozo del Esparto (Almería), con cálculo inteligente de bandera para bañistas.</p>
+        </div>
+        <div>
+          <div class="tags">
+            <span class="tag">Marine Forecast</span>
+            <span class="tag">Bandera de Playa</span>
+            <span class="tag">Tailwind CSS</span>
+            <span class="tag">Stale-While-Revalidate</span>
+          </div>
+          <div class="card-action">
+            <a class="btn btn-primary" href="./pozometeo/">Abrir PozoMeteo ↗</a>
+          </div>
+        </div>
+      </article>
+    </div>
+
+    <footer>
+      <p>Desarrollado por <a href="https://github.com/pedromateo" target="_blank" rel="noopener noreferrer">Pedro Mateo</a> · Código fuente en <a href="https://github.com/pedromateo/meteo" target="_blank" rel="noopener noreferrer">GitHub (pedromateo/meteo)</a></p>
+    </footer>
+  </div>
+
+</body>
+</html>

@@ -1,0 +1,308 @@
+const { JSDOM } = require("jsdom");
+const fs = require("fs");
+
+const html = fs.readFileSync("index.html", "utf8");
+const appjs = fs.readFileSync("app.js", "utf8");
+const mockBeachRules = fs.readFileSync("beach_rules.json", "utf8");
+const mockUITexts = fs.readFileSync("ui_texts.json", "utf8");
+
+// Mocking API responses
+const mockGeneral = {
+  hourly: {
+    temperature_2m: Array(100).fill(25),
+    precipitation_probability: Array(100).fill(0),
+    uv_index: Array(100).fill(5),
+  }
+};
+const mockWind = {
+  hourly: {
+    windspeed_10m_ecmwf_ifs04: Array(100).fill(15),
+    winddirection_10m_ecmwf_ifs04: Array(100).fill(90),
+    windgusts_10m_ecmwf_ifs04: Array(100).fill(22),
+    windspeed_10m_gfs_seamless: Array(100).fill(16),
+    winddirection_10m_gfs_seamless: Array(100).fill(95),
+    windgusts_10m_gfs_seamless: Array(100).fill(24),
+    windspeed_10m_icon_seamless: Array(100).fill(14),
+    winddirection_10m_icon_seamless: Array(100).fill(85),
+    windgusts_10m_icon_seamless: Array(100).fill(20),
+  }
+};
+const mockMarine = {
+  hourly: {
+    wave_height: Array(100).fill(0.5),
+    sea_surface_temperature: Array(100).fill(24.3)
+  }
+};
+
+const dom = new JSDOM(html, { runScripts: "outside-only", url: "http://localhost/" });
+const window = dom.window;
+global.window = window;
+global.document = window.document;
+global.navigator = { onLine: true };
+
+const fetchedUrls = [];
+
+window.fetch = async (url) => {
+  fetchedUrls.push(url);
+  if (url.includes("beach_rules")) return { ok: true, json: async () => JSON.parse(mockBeachRules) };
+  if (url.includes("ui_texts")) return { ok: true, json: async () => JSON.parse(mockUITexts) };
+  if (url.includes("temperature_2m")) return { ok: true, json: async () => mockGeneral };
+  if (url.includes("windspeed_10m")) return { ok: true, json: async () => mockWind };
+  if (url.includes("wave_height")) return { ok: true, json: async () => mockMarine };
+  throw new Error("Unknown URL: " + url);
+};
+
+// Canvas Mock
+window.HTMLCanvasElement.prototype.getContext = () => ({
+  clearRect: () => {},
+  beginPath: () => {},
+  moveTo: () => {},
+  lineTo: () => {},
+  stroke: () => {},
+  fill: () => {},
+});
+
+console.log("🧪 Iniciando suite de pruebas PozoMeteo...");
+
+try {
+  window.eval(appjs);
+
+  // Dispatch DOMContentLoaded
+  const event = window.document.createEvent('Event');
+  event.initEvent('DOMContentLoaded', true, true);
+  window.document.dispatchEvent(event);
+
+  setTimeout(() => {
+    let failed = false;
+
+    // Test 1: Hourly list length
+    const list = document.getElementById('hourly-list');
+    if (list && list.children.length === 16) {
+      console.log('✅ TEST 1 PASADO: Lista horaria generada correctamente (16 tramos de 08:00 a 23:00).');
+    } else {
+      console.error('❌ TEST 1 FALLADO: Elementos esperados 16, encontrados:', list ? list.children.length : 0);
+      failed = true;
+    }
+
+    // Test 2: Main Status Card SVG Wind Arrow
+    const cardWind = document.getElementById('card-wind');
+    const mainSvg = cardWind ? cardWind.querySelector('svg') : null;
+    if (mainSvg && mainSvg.getAttribute('viewBox') === '0 0 24 24') {
+      console.log('✅ TEST 2 PASADO: Flecha SVG de viento presente en la tarjeta principal.');
+    } else {
+      console.error('❌ TEST 2 FALLADO: La flecha SVG en card-wind no existe o no es válida.');
+      failed = true;
+    }
+
+    // Test 3: Hourly List SVG Wind Arrows
+    const hourlySvgs = list ? list.querySelectorAll('svg') : [];
+    if (hourlySvgs.length === 16) {
+      console.log('✅ TEST 3 PASADO: Flechas SVG de viento presentes en cada fila horaria (16/16).');
+    } else {
+      console.error('❌ TEST 3 FALLADO: Flechas SVG en la lista horaria:', hourlySvgs.length);
+      failed = true;
+    }
+
+    // Test 4: Single status badge (No duplicate dot span)
+    const firstRow = list ? list.children[0] : null;
+    const legacyDotSpan = firstRow ? firstRow.querySelector('span.w-2\\.5, span.sm\\:w-3') : null;
+    if (!legacyDotSpan) {
+      console.log('✅ TEST 4 PASADO: No hay puntos de color duplicados en el listado por horas.');
+    } else {
+      console.error('❌ TEST 4 FALLADO: Se encontró punto de color duplicado en la fila.');
+      failed = true;
+    }
+
+    // Test 5: Hybrid Evaluation function unit test
+    if (typeof window.evaluateStatus === 'function') {
+      const config = JSON.parse(mockBeachRules);
+      const res = window.evaluateStatus(15, 90, 0.4, config); // 15 km/h levante, 0.4m wave
+      if (res && res.badge) {
+        console.log(`✅ TEST 5 PASADO: evaluateStatus ejecutado exitosamente -> Badge: "${res.badge}"`);
+      } else {
+        console.error('❌ TEST 5 FALLADO: evaluateStatus retornó resultado inválido');
+        failed = true;
+      }
+    }
+
+    // Test 6: Day selector buttons existence (HOY, fecha+1, fecha+2)
+    const btn0 = document.getElementById('btn-day-0');
+    const btn1 = document.getElementById('btn-day-1');
+    const btn2 = document.getElementById('btn-day-2');
+    if (btn0 && btn1 && btn2 && btn0.textContent.trim() === 'HOY' && btn1.textContent.trim().length > 0 && btn2.textContent.trim().length > 0) {
+      console.log('✅ TEST 6 PASADO: Botones de selección de 3 días (HOY, fecha+1, fecha+2) presentes en el DOM.');
+    } else {
+      console.error('❌ TEST 6 FALLADO: Botones del selector de día faltantes o con etiquetas incorrectas.');
+      failed = true;
+    }
+
+    // Test 7: Default selection is HOY (btn-day-0 active)
+    if (btn0 && btn0.className.includes('bg-[#0072ce]') && !btn1.className.includes('bg-[#0072ce]')) {
+      console.log('✅ TEST 7 PASADO: El selector por defecto tiene "HOY" seleccionado.');
+    } else {
+      console.error('❌ TEST 7 FALLADO: "HOY" no aparece seleccionado por defecto.');
+      failed = true;
+    }
+
+    // Test 8: Interactive day switching (Hoy+1 and Hoy+2 dynamic dates)
+    if (typeof window.selectDay === 'function') {
+      window.selectDay(1); // Click Hoy+1
+      const titleDay1 = document.getElementById('sparkline-title') ? document.getElementById('sparkline-title').textContent : '';
+      const day1Selected = btn1.className.includes('bg-[#0072ce]') && !btn0.className.includes('bg-[#0072ce]');
+
+      window.selectDay(2); // Click Hoy+2
+      const titleDay2 = document.getElementById('sparkline-title') ? document.getElementById('sparkline-title').textContent : '';
+      const day2Selected = btn2.className.includes('bg-[#0072ce]') && !btn1.className.includes('bg-[#0072ce]');
+
+      if (day1Selected && day2Selected && titleDay1.includes(btn1.textContent.trim()) && titleDay2.includes(btn2.textContent.trim())) {
+        console.log('✅ TEST 8 PASADO: Transición entre días actualiza la UI y tendencia de viento correctamente.');
+      } else {
+        console.error('❌ TEST 8 FALLADO: Error al cambiar de día en la previsión.');
+        failed = true;
+      }
+    }
+
+    // Test 9: Verify API endpoints query forecast_days=3
+    const forecast3Calls = fetchedUrls.filter(u => u.includes('forecast_days=3'));
+    if (forecast3Calls.length >= 3) {
+      console.log('✅ TEST 9 PASADO: Las 3 APIs meteorológicas están solicitando previsión para 3 días (forecast_days=3).');
+    } else {
+      console.error('❌ TEST 9 FALLADO: Las APIs no están solicitando forecast_days=3. Llamadas:', forecast3Calls);
+      failed = true;
+    }
+
+    // Test 10: Verify getGlobalMaxWind function returns fixed max scale across all 3 days
+    if (typeof window.getGlobalMaxWind === 'function') {
+      const maxWindVal = window.getGlobalMaxWind();
+      if (typeof maxWindVal === 'number' && maxWindVal >= 15) {
+        console.log(`✅ TEST 10 PASADO: Escala de viento unificada fijada correctamente a ${maxWindVal} km/h para los 3 días.`);
+      } else {
+        console.error('❌ TEST 10 FALLADO: getGlobalMaxWind retornó un valor no numérico o inválido:', maxWindVal);
+        failed = true;
+      }
+    }
+
+    // Test 11: Verify UI texts externalization via ui_texts.json
+    const hourlyTitleEl = document.getElementById('hourly-title');
+    if (hourlyTitleEl && hourlyTitleEl.textContent === 'Evolución (08:00 - 23:00)') {
+      console.log('✅ TEST 11 PASADO: Textos de la UI cargados e inyectados correctamente desde ui_texts.json.');
+    } else {
+      console.error('❌ TEST 11 FALLADO: Error inyectando textos desde ui_texts.json.');
+      failed = true;
+    }
+
+    // Test 12: Verify loadRules and getRules availability for predictions without explicit config
+    if (typeof window.getRules === 'function' && typeof window.loadRules === 'function') {
+      const activeRules = window.getRules();
+      const evalWithoutConfig = window.evaluateStatus(12, 90, 0.2); // No config argument passed
+      if (activeRules && activeRules.rules && evalWithoutConfig && evalWithoutConfig.badge) {
+        console.log(`✅ TEST 12 PASADO: Fichero de reglas siempre disponible y funcional en evaluateStatus() sin pasar configuración explícita -> Badge: "${evalWithoutConfig.badge}".`);
+      } else {
+        console.error('❌ TEST 12 FALLADO: Las reglas no se cargaron correctamente o evaluateStatus sin config falló.');
+        failed = true;
+      }
+    }
+
+    // Test 13: Verify localStorage cache persistence for rules
+    const cachedRulesStr = window.localStorage.getItem('pozometeo_rules');
+    if (cachedRulesStr && JSON.parse(cachedRulesStr).beach_info) {
+      console.log('✅ TEST 13 PASADO: Fichero de reglas guardado correctamente en localStorage (pozometeo_rules) para disponibilidad offline total.');
+    } else {
+      console.error('❌ TEST 13 FALLADO: Las reglas no se guardaron en localStorage.');
+      failed = true;
+    }
+
+    // Test 14: Verify ambient and water temperature cards in main status card
+    const cardTemp = document.getElementById('card-temp');
+    const cardWaterTemp = document.getElementById('card-water-temp');
+    if (cardTemp && cardTemp.textContent.includes('25°C') && cardWaterTemp && cardWaterTemp.textContent.includes('24.3°C')) {
+      console.log('✅ TEST 14 PASADO: Cuadros de temperatura ambiente (25°C) y temperatura del agua (24.3°C) renderizados correctamente.');
+    } else {
+      console.error('❌ TEST 14 FALLADO: Temperatura ambiente o del agua no encontrada en las tarjetas principales:', {
+        temp: cardTemp ? cardTemp.textContent : null,
+        waterTemp: cardWaterTemp ? cardWaterTemp.textContent : null
+      });
+      failed = true;
+    }
+
+    // Test 15: Verify swipe gestures for day navigation
+    window.selectDay(0); // Reset to today
+    const dispatchSwipe = (deltaX, deltaY) => {
+      const touchStart = window.document.createEvent('Event');
+      touchStart.initEvent('touchstart', true, true);
+      touchStart.changedTouches = [{ screenX: 100, screenY: 100 }];
+      window.dispatchEvent(touchStart);
+      
+      const touchEnd = window.document.createEvent('Event');
+      touchEnd.initEvent('touchend', true, true);
+      touchEnd.changedTouches = [{ screenX: 100 + deltaX, screenY: 100 + deltaY }];
+      window.dispatchEvent(touchEnd);
+    };
+
+    dispatchSwipe(-100, 0); // Swipe left
+    const swipeLeftSuccess = document.getElementById('btn-day-1').className.includes('bg-[#0072ce]');
+    
+    dispatchSwipe(-100, 0); // Swipe left again to day 2
+    const swipeLeft2Success = document.getElementById('btn-day-2').className.includes('bg-[#0072ce]');
+    
+    dispatchSwipe(-100, 0); // Swipe left again, should stay on day 2
+    const overSwipeLeftSuccess = document.getElementById('btn-day-2').className.includes('bg-[#0072ce]');
+
+    dispatchSwipe(100, 0); // Swipe right to day 1
+    const swipeRightSuccess = document.getElementById('btn-day-1').className.includes('bg-[#0072ce]');
+
+    dispatchSwipe(10, 100); // Vertical scroll down, should ignore
+    const ignoreVerticalScrollSuccess = document.getElementById('btn-day-1').className.includes('bg-[#0072ce]');
+
+    if (swipeLeftSuccess && swipeLeft2Success && overSwipeLeftSuccess && swipeRightSuccess && ignoreVerticalScrollSuccess) {
+      console.log('✅ TEST 15 PASADO: Navegación por gestos Swipe Left y Swipe Right validada correctamente.');
+    } else {
+      console.error('❌ TEST 15 FALLADO: Error en la navegación por swipe.', { swipeLeftSuccess, swipeLeft2Success, overSwipeLeftSuccess, swipeRightSuccess, ignoreVerticalScrollSuccess });
+      failed = true;
+    }
+
+    // Test 16: Verify wind gusts in hourly evolution list and absent from main card
+    const cardWindText = cardWind ? cardWind.textContent : '';
+    const firstRowText = list && list.children[0] ? list.children[0].textContent : '';
+    if (!cardWindText.includes('|') && firstRowText.includes('| 24.8 km/h')) {
+      console.log('✅ TEST 16 PASADO: Dato de velocidad de rachas de viento presente en la lista por horas y excluido de la tarjeta principal.');
+    } else {
+      console.error('❌ TEST 16 FALLADO: Comprobación de rachas fallida:', { cardWindText, firstRowText });
+      failed = true;
+    }
+
+    // Test 17: Verify hourly color blocks container (16 blocks for 08:00 - 23:00)
+    const colorBar = document.getElementById('hourly-color-bar');
+    const colorBlocks = colorBar ? colorBar.querySelectorAll('.hourly-color-block') : [];
+    if (colorBar && colorBlocks.length === 16 && colorBlocks[0].style.backgroundColor) {
+      console.log('✅ TEST 17 PASADO: Barra de bloques cuadrados de colores por hora generada correctamente (16 bloques con color asignado).');
+    } else {
+      console.error('❌ TEST 17 FALLADO: Bloques de color por hora inválidos o incompletos:', colorBlocks.length);
+      failed = true;
+    }
+
+    // Test 18: Verify hourly color labels (8h, 12h, 16h, 20h, 23h present)
+    const colorLabelsContainer = document.getElementById('hourly-color-labels');
+    const labels = colorLabelsContainer ? Array.from(colorLabelsContainer.children).map(c => c.textContent.trim()) : [];
+    const expectedLabels = ['8h', '12h', '16h', '20h', '23h'];
+    const hasAllExpectedLabels = expectedLabels.every(lbl => labels.includes(lbl));
+    if (colorLabelsContainer && labels.length === 16 && hasAllExpectedLabels) {
+      console.log('✅ TEST 18 PASADO: Indicadores de hora (8h, 12h, 16h, 20h, 23h) posicionados correctamente debajo de los bloques.');
+    } else {
+      console.error('❌ TEST 18 FALLADO: Etiquetas de hora erróneas o incompletas:', labels);
+      failed = true;
+    }
+
+    if (failed) {
+      console.error('\n💥 Suite de pruebas FINALIZADA CON ERRORES.');
+      process.exit(1);
+    } else {
+      console.log('\n🎉 TODAS LAS PRUEBAS (18/18) HAN PASADO CON ÉXITO.');
+      process.exit(0);
+    }
+  }, 800);
+
+} catch (e) {
+  console.error('💥 EXCEPCIÓN EN TESTS:', e);
+  process.exit(1);
+}

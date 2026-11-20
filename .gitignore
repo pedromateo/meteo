@@ -1,0 +1,22 @@
+# Dependencias
+node_modules/
+
+# Entornos y secretos locales
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+npm-debug.log*
+
+# Builds y empaquetado
+dist/
+
+# Tests y reportes
+playwright-report/
+test-results/
+
+# Sistema operativo
+.DS_Store
+Thumbs.db
