@@ -47,6 +47,7 @@ jobs:
         if: hashFiles('pozometeo/test.js') != ''
         working-directory: pozometeo
         run: |
+          npm ci || npm install
           node test.js
 
       - name: Prepare production build
