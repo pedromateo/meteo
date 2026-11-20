@@ -31,7 +31,7 @@ test.describe('MurMeteo PWA - Pruebas E2E', () => {
 
     // Título y logo
     const titleText = page.locator('#header-title-text');
-    await expect(titleText).toHaveText('PLMeteo');
+    await expect(titleText).toHaveText('pl.meteo');
 
     const logo = page.locator('.header-logo');
     await expect(logo).toBeVisible();

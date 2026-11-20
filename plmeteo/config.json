@@ -37,7 +37,7 @@
     }
   },
   "ui": {
-    "app_title": "PLMeteo",
+    "app_title": "pl.meteo",
     "location_label": "<svg viewBox='0 0 24 24' width='16' height='16' stroke='currentColor' stroke-width='2' fill='none' stroke-linecap='round' stroke-linejoin='round' style='vertical-align: text-bottom;'><path d='M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z'></path><circle cx='12' cy='10' r='3'></circle></svg> Puerto Lumbreras",
     "now_badge": "Ahora",
     "offline_warning": "Sin conexión - Mostrando datos guardados",

@@ -1,14 +1,14 @@
-# ☀️ MurMeteo
+# ☀️ pl.meteo
 
-> Aplicación web progresiva (PWA) moderna, ligera y rápida para consultar la previsión meteorológica hora a hora de Murcia, con soporte offline, datos oficiales de **AEMET OpenData** y modo de pruebas con datos simulados.
+> Aplicación web progresiva (PWA) moderna, ligera y rápida para consultar la previsión meteorológica hora a hora de Puerto Lumbreras, con soporte offline, datos oficiales de **AEMET OpenData** y modo de pruebas con datos simulados.
 
-![MurMeteo](icons/android/play_store_512.png)
+![pl.meteo](icons/android/play_store_512.png)
 
 ---
 
 ## 🚀 Características principales
 
-- **📡 Datos oficiales en tiempo real**: Conexión con la API de [AEMET OpenData](https://opendata.aemet.es/) (predicción horaria oficial para el municipio de Murcia `30030`).
+- **📡 Datos oficiales en tiempo real**: Conexión con la API de [AEMET OpenData](https://opendata.aemet.es/) (predicción horaria oficial para el municipio de Puerto Lumbreras `30033`).
 - **🌅 Información de Orto y Ocaso**: Visualización de la hora exacta de salida y puesta del sol.
 - **🌡️ Métricas completas**:
   - Temperatura real y sensación térmica.

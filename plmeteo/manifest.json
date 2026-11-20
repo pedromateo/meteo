@@ -1,6 +1,6 @@
 {
-  "short_name": "PLMeteo",
-  "name": "PLMeteo - Previsión Puerto Lumbreras",
+  "short_name": "pl.meteo",
+  "name": "pl.meteo - Previsión Puerto Lumbreras",
   "icons": [
     {
       "src": "./icons/icon.svg",
