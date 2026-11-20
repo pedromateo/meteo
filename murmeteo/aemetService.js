@@ -3,7 +3,7 @@ class AemetService {
     this.config = config;
   }
 
-  static getCandidateForecastFiles(count = 5, now = new Date()) {
+  static getCandidateForecastFiles(count = 5, now = new Date(), municipioId = null) {
     const candidates = [];
     const getParts = (d) => {
       const parts = new Intl.DateTimeFormat('en-CA', {
@@ -31,7 +31,13 @@ class AemetService {
       const m = String(currentDate.getUTCMonth() + 1).padStart(2, '0');
       const d = String(currentDate.getUTCDate()).padStart(2, '0');
       const period = currentIsPm ? 'pm' : 'am';
-      candidates.push(`forecast_${y}${m}${d}_${period}.json`);
+      const slot = `${y}${m}${d}_${period}`;
+
+      if (municipioId && municipioId !== "30030") {
+        candidates.push(`forecast_${municipioId}_${slot}.json`);
+      } else {
+        candidates.push(`forecast_${slot}.json`);
+      }
 
       if (currentIsPm) {
         currentIsPm = false;
@@ -44,9 +50,11 @@ class AemetService {
   }
 
   async getForecast() {
+    const municipioId = this.config.location?.municipio_id || "30030";
+
     // 1. Intentar cargar los archivos estáticos rotativos (forecasts/forecast_YYYYMMDD_xx.json)
     if (typeof window !== 'undefined' && typeof window.fetch === 'function') {
-      const candidates = AemetService.getCandidateForecastFiles(5);
+      const candidates = AemetService.getCandidateForecastFiles(5, new Date(), municipioId);
       const cacheBuster = Date.now();
 
       for (const filename of candidates) {
@@ -68,22 +76,28 @@ class AemetService {
         }
       }
 
-      // Fallback a forecast.json tradicional en la raíz si ninguno de los rotativos responde
-      try {
-        const res = await fetch(`./forecast.json?t=${cacheBuster}`, {
-          cache: 'no-store',
-          headers: {
-            'Cache-Control': 'no-cache',
-            'Pragma': 'no-cache'
+      // Fallback a archivos estáticos específicos o genéricos
+      const legacyFiles = municipioId && municipioId !== '30030'
+        ? [`./forecast_${municipioId}.json`]
+        : [`./forecast.json`, `./forecast_30030.json`];
+
+      for (const legacyFile of legacyFiles) {
+        try {
+          const res = await fetch(`${legacyFile}?t=${cacheBuster}`, {
+            cache: 'no-store',
+            headers: {
+              'Cache-Control': 'no-cache',
+              'Pragma': 'no-cache'
+            }
+          });
+          if (res.ok) {
+            const lastModified = res.headers.get('last-modified');
+            const data = await res.json();
+            return this._parseAemetResponse(data, lastModified);
           }
-        });
-        if (res.ok) {
-          const lastModified = res.headers.get('last-modified');
-          const data = await res.json();
-          return this._parseAemetResponse(data, lastModified);
+        } catch (e) {
+          // Continuar
         }
-      } catch (e) {
-        console.info("No se encontró forecast.json estático, usando método alternativo.");
       }
     }
 
@@ -95,18 +109,214 @@ class AemetService {
       return this._generateMockData();
     }
 
-    // Fallback a Open-Meteo (Sin API Key) si estamos en Github Pages sin clave
+    // Fallback si no hay clave: intentar XML de AEMET primero, y si falla (p.ej. CORS en navegador) Open-Meteo
     if (needsFallback) {
-      console.info("Usando Open-Meteo como fallback (No AEMET API Key detectada)");
-      return this._fetchOpenMeteoFallback();
+      try {
+        console.info("Sin API Key de AEMET: intentando obtener datos oficiales desde XML de AEMET...");
+        return await this._fetchAemetXmlFallback();
+      } catch (xmlErr) {
+        console.info("Fallback XML no disponible (CORS o red), usando Open-Meteo:", xmlErr.message);
+        return this._fetchOpenMeteoFallback();
+      }
     }
 
     try {
       return await this._fetchAemetData();
     } catch (err) {
-      console.error("Error al obtener datos reales de AEMET OpenData:", err);
-      throw err;
+      console.warn("Error al obtener datos reales de AEMET OpenData API, probando fallback XML:", err.message);
+      try {
+        return await this._fetchAemetXmlFallback();
+      } catch (xmlErr) {
+        console.error("Fallo también el fallback XML de AEMET:", xmlErr.message);
+        throw err;
+      }
     }
+  }
+
+  // Fallback to official AEMET XML (no API Key required)
+  async _fetchAemetXmlFallback() {
+    const municipioId = this.config.location?.municipio_id || "30030";
+    const xmlUrl = `https://www.aemet.es/xml/municipios_h/localidad_h_${municipioId}.xml`;
+    const timeoutMs = this.config.api?.timeout_ms || 10000;
+
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+    try {
+      const response = await fetch(xmlUrl, {
+        headers: {
+          'Cache-Control': 'no-cache'
+        },
+        signal: controller.signal
+      });
+
+      if (!response.ok) {
+        throw new Error(`Error en el servidor de AEMET XML (HTTP ${response.status})`);
+      }
+
+      const arrayBuffer = await response.arrayBuffer();
+      const decoder = typeof TextDecoder !== 'undefined' ? new TextDecoder('iso-8859-15') : null;
+      const xmlText = decoder ? decoder.decode(arrayBuffer) : (typeof Buffer !== 'undefined' ? Buffer.from(arrayBuffer).toString('latin1') : '');
+      const rawData = AemetService.parseAemetXml(xmlText);
+      return this._parseAemetResponse(rawData);
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  // Converts AEMET XML (e.g. localidad_h_30030.xml) to standard AEMET JSON array
+  static parseAemetXml(xmlText) {
+    if (!xmlText || typeof xmlText !== 'string') {
+      throw new Error('XML de AEMET vacío o inválido');
+    }
+
+    const origenMatch = xmlText.match(/<origen>([\s\S]*?)<\/origen>/);
+    const origen = {};
+    if (origenMatch) {
+      const o = origenMatch[1];
+      origen.productor = o.match(/<productor>([\s\S]*?)<\/productor>/)?.[1]?.trim() || '';
+      origen.web = o.match(/<web>([\s\S]*?)<\/web>/)?.[1]?.trim() || '';
+      origen.enlace = o.match(/<enlace>([\s\S]*?)<\/enlace>/)?.[1]?.trim() || '';
+      origen.language = o.match(/<language>([\s\S]*?)<\/language>/)?.[1]?.trim() || '';
+      origen.copyright = o.match(/<copyright>([\s\S]*?)<\/copyright>/)?.[1]?.trim() || '';
+      origen.notaLegal = (o.match(/<nota_legal>([\s\S]*?)<\/nota_legal>/)?.[1] || o.match(/<notaLegal>([\s\S]*?)<\/notaLegal>/)?.[1] || '').trim();
+    }
+
+    const elaborado = xmlText.match(/<elaborado>([\s\S]*?)<\/elaborado>/)?.[1]?.trim() || '';
+    const nombre = xmlText.match(/<nombre>([\s\S]*?)<\/nombre>/)?.[1]?.trim() || '';
+    const provincia = xmlText.match(/<provincia>([\s\S]*?)<\/provincia>/)?.[1]?.trim() || '';
+    const idMatch = xmlText.match(/<root[^>]*\bid="([^"]+)"/);
+    const id = idMatch ? idMatch[1] : '';
+
+    const dias = [];
+    const diaMatches = [...xmlText.matchAll(/<dia\s+([^>]+)>([\s\S]*?)<\/dia>/g)];
+    for (const match of diaMatches) {
+      const attrs = match[1];
+      const content = match[2];
+      const fecha = attrs.match(/fecha="([^"]+)"/)?.[1] || '';
+      const orto = attrs.match(/orto="([^"]+)"/)?.[1] || '';
+      const ocaso = attrs.match(/ocaso="([^"]+)"/)?.[1] || '';
+
+      const diaObj = {
+        estadoCielo: [],
+        precipitacion: [],
+        probPrecipitacion: [],
+        probTormenta: [],
+        nieve: [],
+        probNieve: [],
+        temperatura: [],
+        sensTermica: [],
+        humedadRelativa: [],
+        viento: [],
+        rachaMax: [],
+        vientoAndRachaMax: [],
+        fecha: fecha.includes('T') ? fecha : (fecha ? fecha + 'T00:00:00' : ''),
+        orto,
+        ocaso
+      };
+
+      // estado_cielo: <estado_cielo periodo="14" descripcion="Poco nuboso">12</estado_cielo>
+      const estadoCieloMatches = [...content.matchAll(/<estado_cielo\s+([^>]*)(?:\/>|>([\s\S]*?)<\/estado_cielo>)/g)];
+      for (const m of estadoCieloMatches) {
+        const elAttrs = m[1] || '';
+        const val = (m[2] || '').trim();
+        const periodo = elAttrs.match(/periodo="([^"]+)"/)?.[1] || '';
+        const descripcion = elAttrs.match(/descripcion="([^"]*)"/)?.[1] || '';
+        if (periodo) {
+          diaObj.estadoCielo.push({
+            value: val,
+            periodo,
+            descripcion
+          });
+        }
+      }
+
+      // Simple tags with periodo attribute
+      const parseSimpleElements = (tagName, targetArray) => {
+        const regex = new RegExp('<' + tagName + '\\s+([^>]*)(?:\\/>|>([\\s\\S]*?)<\\/' + tagName + '>)', 'g');
+        for (const m of content.matchAll(regex)) {
+          const elAttrs = m[1] || '';
+          const val = (m[2] || '').trim();
+          const periodo = elAttrs.match(/periodo="([^"]+)"/)?.[1];
+          if (periodo) {
+            targetArray.push({
+              value: val,
+              periodo
+            });
+          }
+        }
+      };
+
+      parseSimpleElements('precipitacion', diaObj.precipitacion);
+      parseSimpleElements('prob_precipitacion', diaObj.probPrecipitacion);
+      parseSimpleElements('prob_tormenta', diaObj.probTormenta);
+      parseSimpleElements('nieve', diaObj.nieve);
+      parseSimpleElements('prob_nieve', diaObj.probNieve);
+      parseSimpleElements('temperatura', diaObj.temperatura);
+      parseSimpleElements('sens_termica', diaObj.sensTermica);
+      parseSimpleElements('humedad_relativa', diaObj.humedadRelativa);
+
+      // viento & racha_max
+      const vientoMatches = [...content.matchAll(/<viento\s+([^>]*)(?:\/>|>([\s\S]*?)<\/viento>)/g)];
+      for (const m of vientoMatches) {
+        const elAttrs = m[1] || '';
+        const inner = m[2] || '';
+        const periodo = elAttrs.match(/periodo="([^"]+)"/)?.[1];
+        if (periodo) {
+          const dir = inner.match(/<direccion>([\s\S]*?)<\/direccion>/)?.[1]?.trim() || '';
+          const vel = inner.match(/<velocidad>([\s\S]*?)<\/velocidad>/)?.[1]?.trim() || '';
+          const vObj = {
+            direccion: [dir],
+            velocidad: [vel],
+            periodo
+          };
+          diaObj.viento.push(vObj);
+        }
+      }
+
+      const rachaMatches = [...content.matchAll(/<racha_max\s+([^>]*)(?:\/>|>([\s\S]*?)<\/racha_max>)/g)];
+      for (const m of rachaMatches) {
+        const elAttrs = m[1] || '';
+        const val = (m[2] || '').trim();
+        const periodo = elAttrs.match(/periodo="([^"]+)"/)?.[1];
+        if (periodo) {
+          const rObj = {
+            value: val,
+            periodo
+          };
+          diaObj.rachaMax.push(rObj);
+        }
+      }
+
+      // Populate vientoAndRachaMax interleaved
+      const periodsSet = new Set([
+        ...diaObj.viento.map(v => v.periodo),
+        ...diaObj.rachaMax.map(r => r.periodo)
+      ]);
+      const sortedPeriods = Array.from(periodsSet).sort((a, b) => parseInt(a, 10) - parseInt(b, 10));
+      for (const p of sortedPeriods) {
+        const v = diaObj.viento.find(item => item.periodo === p);
+        const r = diaObj.rachaMax.find(item => item.periodo === p);
+        if (v) diaObj.vientoAndRachaMax.push(v);
+        if (r) diaObj.vientoAndRachaMax.push(r);
+      }
+
+      dias.push(diaObj);
+    }
+
+    return [
+      {
+        origen,
+        elaborado,
+        nombre,
+        provincia,
+        prediccion: {
+          dia: dias
+        },
+        id: id || undefined,
+        version: '1.0'
+      }
+    ];
   }
 
   // Fetch real forecast from AEMET OpenData API

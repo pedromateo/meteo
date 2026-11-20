@@ -4,6 +4,7 @@
   "description": "MurMeteo PWA",
   "scripts": {
     "start": "node server.js",
+    "update-forecast": "node fetch-aemet.js",
     "test": "node test.js && npx playwright test",
     "test:unit": "node test.js",
     "test:e2e": "npx playwright test"

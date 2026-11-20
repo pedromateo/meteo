@@ -229,6 +229,97 @@ service.getForecast().then(data => {
   console.assert(hour12 && hour12.windGust === 32, `Error parseando racha viento: ${hour12?.windGust}`);
   console.log("✅ Parseo de vientoAndRachaMax de AEMET validado correctamente.");
 
+  // 6b. Test AEMET XML Parsing (Fallback localidad_h_30030.xml)
+  const sampleXml = `<?xml version='1.0' encoding='ISO-8859-15'?>
+<root id="30030" version="1.0">
+  <origen>
+    <productor>Agencia Estatal de Meteorologia</productor>
+    <web>https://www.aemet.es</web>
+    <enlace>https://www.aemet.es/es/eltiempo/prediccion/municipios/horas/murcia-id30030</enlace>
+  </origen>
+  <elaborado>2099-01-01T08:00:00</elaborado>
+  <nombre>Murcia</nombre>
+  <provincia>Murcia</provincia>
+  <prediccion>
+    <dia fecha="2099-01-01" orto="07:45" ocaso="18:05">
+      <estado_cielo periodo="14" descripcion="Poco nuboso">12</estado_cielo>
+      <precipitacion periodo="14">0.2</precipitacion>
+      <temperatura periodo="14">24</temperatura>
+      <sens_termica periodo="14">23</sens_termica>
+      <humedad_relativa periodo="14">45</humedad_relativa>
+      <viento periodo="14">
+        <direccion>SO</direccion>
+        <velocidad>15</velocidad>
+      </viento>
+      <racha_max periodo="14">28</racha_max>
+    </dia>
+  </prediccion>
+</root>`;
+
+  const parsedFromXml = AemetService.parseAemetXml(sampleXml);
+  console.assert(Array.isArray(parsedFromXml) && parsedFromXml.length === 1, "Error: parseAemetXml debe devolver un array con 1 elemento");
+  console.assert(parsedFromXml[0].nombre === "Murcia", "Error: nombre de municipio incorrecto en XML parseado");
+  console.assert(parsedFromXml[0].elaborado === "2099-01-01T08:00:00", "Error: fecha elaborado incorrecta en XML parseado");
+
+  const parsedXmlForecast = service._parseAemetResponse(parsedFromXml);
+  const xmlHour14 = parsedXmlForecast.hourly.find(h => h.hour === 14);
+  console.assert(xmlHour14, "Error: no se encontró la hora 14 en la predicción parseada del XML");
+  console.assert(xmlHour14.temp === 24, `Error temperatura en XML: esperado 24, obtenido ${xmlHour14.temp}`);
+  console.assert(xmlHour14.windSpeed === 15, `Error velocidad viento en XML: esperado 15, obtenido ${xmlHour14.windSpeed}`);
+  console.assert(xmlHour14.windGust === 28, `Error racha viento en XML: esperado 28, obtenido ${xmlHour14.windGust}`);
+  console.assert(xmlHour14.precip === 0.2, `Error precipitación en XML: esperado 0.2, obtenido ${xmlHour14.precip}`);
+  console.log("✅ Parseo de XML de AEMET (fallback) validado correctamente.");
+
+  // 6c. Test Puerto Lumbreras (30033) XML parsing & extraction config
+  const sampleXmlPL = `<?xml version='1.0' encoding='ISO-8859-15'?>
+<root id="30033" version="1.0">
+  <origen>
+    <productor>Agencia Estatal de Meteorologia</productor>
+    <web>https://www.aemet.es</web>
+    <enlace>https://www.aemet.es/es/eltiempo/prediccion/municipios/horas/puerto-lumbreras-id30033</enlace>
+  </origen>
+  <elaborado>2099-01-01T08:00:00</elaborado>
+  <nombre>Puerto Lumbreras</nombre>
+  <provincia>Murcia</provincia>
+  <prediccion>
+    <dia fecha="2099-01-01" orto="07:51" ocaso="17:53">
+      <estado_cielo periodo="14" descripcion="Despejado">11</estado_cielo>
+      <precipitacion periodo="14">0</precipitacion>
+      <temperatura periodo="14">21</temperatura>
+      <sens_termica periodo="14">21</sens_termica>
+      <humedad_relativa periodo="14">38</humedad_relativa>
+      <viento periodo="14">
+        <direccion>SO</direccion>
+        <velocidad>8</velocidad>
+      </viento>
+      <racha_max periodo="14">14</racha_max>
+    </dia>
+  </prediccion>
+</root>`;
+
+  const parsedFromXmlPL = AemetService.parseAemetXml(sampleXmlPL);
+  console.assert(parsedFromXmlPL[0].nombre === "Puerto Lumbreras", "Error: nombre incorrecto en XML de Puerto Lumbreras");
+  console.assert(parsedFromXmlPL[0].id === "30033", "Error: ID incorrecto en XML de Puerto Lumbreras");
+
+  const plService = new AemetService({ location: { name: 'Puerto Lumbreras', municipio_id: '30033' }, api: {} });
+  const parsedPlForecast = plService._parseAemetResponse(parsedFromXmlPL);
+  console.assert(parsedPlForecast.location === "Puerto Lumbreras", "Error en location de predicción de Puerto Lumbreras");
+  console.assert(parsedPlForecast.current.temp === 21, "Error en temperatura actual de Puerto Lumbreras");
+
+  // Candidates for Puerto Lumbreras vs Murcia
+  const plCandidates = AemetService.getCandidateForecastFiles(5, afternoonDate, '30033');
+  console.assert(plCandidates.length === 5, "Error: Se esperaban 5 candidatos para Puerto Lumbreras");
+  console.assert(plCandidates[0] === 'forecast_30033_20260907_pm.json', `Error: candidato debe ser forecast_30033_20260907_pm.json: ${plCandidates[0]}`);
+
+  // TARGET_MUNICIPIOS validation
+  const { TARGET_MUNICIPIOS } = require('./fetch-aemet.js');
+  console.assert(Array.isArray(TARGET_MUNICIPIOS) && TARGET_MUNICIPIOS.length >= 2, "Error: TARGET_MUNICIPIOS debe contener al menos 2 municipios");
+  const murciaConf = TARGET_MUNICIPIOS.find(m => m.id === '30030');
+  const lumbrerasConf = TARGET_MUNICIPIOS.find(m => m.id === '30033');
+  console.assert(murciaConf && murciaConf.isDefault === true, "Error: Murcia debe ser el municipio por defecto");
+  console.assert(lumbrerasConf && lumbrerasConf.name === 'Puerto Lumbreras', "Error: Puerto Lumbreras no encontrado en TARGET_MUNICIPIOS");
+  console.log("✅ Predicción y configuración de Puerto Lumbreras (30033) validadas correctamente.");
+
   // 7. Test Shortcuts Configuration & renderShortcuts export
   const { renderShortcuts } = require('./app.js');
   console.assert(typeof renderShortcuts === 'function', "Error: renderShortcuts debe ser una función");
