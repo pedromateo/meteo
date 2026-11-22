@@ -13,6 +13,7 @@
     .stroke-main { stroke: #1b3554; stroke-width: 6; stroke-linecap: round; stroke-linejoin: round; }
     .stroke-thick { stroke: #1b3554; stroke-width: 7.5; stroke-linecap: round; stroke-linejoin: round; }
     .stroke-thin { stroke: #1b3554; stroke-width: 4; stroke-linecap: round; stroke-linejoin: round; }
+    .stroke-white { stroke: #ffffff; stroke-width: 8; stroke-linecap: round; stroke-linejoin: round; }
     .fill-navy { fill: #1b3554; }
     .fill-ochre { fill: #de783b; }
     .fill-ochre-light { fill: #ea8a4e; }
@@ -141,5 +142,5 @@
   </g>
 
   <!-- Borde circular exterior -->
-  <circle cx="256" cy="256" r="202" fill="none" class="stroke-thick" stroke-width="8"/>
+  <circle cx="256" cy="256" r="202" fill="none" class="stroke-white" stroke="#ffffff" stroke-width="8"/>
 </svg>
